@@ -1,18 +1,19 @@
 package controllers
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/duvrdx/whoami/internal/config"
 	"github.com/duvrdx/whoami/internal/schemas"
 	"github.com/duvrdx/whoami/internal/services"
 	"github.com/duvrdx/whoami/internal/utils"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
-	"github.com/spf13/viper"
 )
 
-var jwtSecret = viper.GetInt("token.secret")
-var tokenExpiration = viper.GetInt("token.expiration")
+var jwtSecret = config.JWTSecret
+var tokenExpiration = config.TokenExpiration
 
 type Claims struct {
 	UserID   uint `json:"user_id"`
@@ -201,7 +202,10 @@ func (controller AuthController) Token(c echo.Context) error {
 		}
 
 		// Define o tempo de expiração do token
-		expiresIn := time.Now().Unix() + int64(tokenExpiration)
+		expiresIn := time.Now().Unix() + int64(config.TokenExpiration)
+
+		fmt.Println(config.JWTSecret)
+		fmt.Println(string(config.JWTSecret))
 
 		// Cria as claims do JWT
 		claims := &Claims{
@@ -214,9 +218,10 @@ func (controller AuthController) Token(c echo.Context) error {
 
 		// Gera o token JWT
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-		accessToken, err := token.SignedString(jwtSecret)
+		accessToken, err := token.SignedString(config.JWTSecret)
 
 		if err != nil {
+			fmt.Println(err)
 			return c.JSON(500, "Failed to generate access token")
 		}
 
@@ -268,7 +273,7 @@ func (controller AuthController) RefreshToken(c echo.Context) error {
 		return c.JSON(404, "Token expired")
 	}
 
-	expiresIn := time.Now().Unix() + int64(tokenExpiration)
+	expiresIn := time.Now().Unix() + int64(config.TokenExpiration)
 
 	// Cria as claims do JWT
 	claims := &Claims{
@@ -281,7 +286,7 @@ func (controller AuthController) RefreshToken(c echo.Context) error {
 
 	// Gera o token JWT
 	newTokenJWT := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	newAccessToken, err := newTokenJWT.SignedString(jwtSecret)
+	newAccessToken, err := newTokenJWT.SignedString(config.JWTSecret)
 
 	if err != nil {
 		return c.JSON(500, "Failed to generate access token")

@@ -6,7 +6,7 @@ import (
 
 type User struct {
 	gorm.Model
-	Identifier string   `json:"identifier"`
+	Identifier string   `json:"identifier" gorm:"unique"`
 	Password   string   `json:"password"`
 	IsActive   bool     `gorm:"default: true" json:"is_active"`
 	IsAdmin    bool     `gorm:"default: false" json:"is_admin"`
@@ -16,7 +16,7 @@ type User struct {
 
 type Group struct {
 	gorm.Model
-	Identifier  string  `json:"identifier"`
+	Identifier  string  `json:"identifier" gorm:"unique"`
 	Description string  `gorm:"default:''" json:"description"`
 	Metadata    string  `gorm:"default:'{}'" json:"metadata"`
 	IsActive    bool    `gorm:"default: true" json:"is_active"`
@@ -25,7 +25,7 @@ type Group struct {
 
 type Client struct {
 	gorm.Model
-	Identifier string `json:"identifier"`
+	Identifier string `json:"identifier" gorm:"unique"`
 	Secret     string `json:"secret"`
 	IsActive   bool   `gorm:"default: true" json:"is_active"`
 	Grant      string `json:"grant"`

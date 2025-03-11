@@ -5,6 +5,7 @@ import (
 	"github.com/duvrdx/whoami/internal/middlewares"
 	"github.com/duvrdx/whoami/internal/services"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 type Routing struct {
@@ -15,6 +16,7 @@ func (Routing Routing) GetRoutes() *echo.Echo {
 
 	e.Use(middlewares.JWTMiddleware)
 	e.Use(middlewares.LoggerMiddleware)
+	e.Use(middleware.Recover())
 
 	// Controllers and Services definitions
 	authService := services.NewAuthService()
@@ -40,6 +42,39 @@ func (Routing Routing) GetRoutes() *echo.Echo {
 	auth.DELETE("/client/:identifier", authController.DeleteClient)
 	auth.GET("/client/:identifier", authController.GetClient)
 	auth.GET("/client", authController.GetClients)
+
+	// Authz RBAC routes
+	authzRBACService := services.NewAuthzRBACService()
+	authzRBACController := controllers.NewAuthzRBACController(authzRBACService)
+
+	authz := e.Group("/authz")
+	rbac := authz.Group("/rbac")
+	rbac.POST("/role", authzRBACController.CreateRole)
+	rbac.PUT("/role/:identifier", authzRBACController.UpdateRole)
+	rbac.DELETE("/role/:identifier", authzRBACController.DeleteRole)
+	rbac.GET("/role/:identifier", authzRBACController.GetRole)
+	rbac.GET("/role", authzRBACController.GetRoles)
+
+	rbac.POST("/permission", authzRBACController.CreatePermission)
+	rbac.PUT("/permission/:identifier", authzRBACController.UpdatePermission)
+	rbac.DELETE("/permission/:identifier", authzRBACController.DeletePermission)
+	rbac.GET("/permission/:identifier", authzRBACController.GetPermission)
+	rbac.GET("/permission", authzRBACController.GetPermissions)
+
+	rbac.POST("/resourcetype", authzRBACController.CreateResourceType)
+	rbac.PUT("/resourcetype/:identifier", authzRBACController.UpdateResourceType)
+	rbac.DELETE("/resourcetype/:identifier", authzRBACController.DeleteResourceType)
+	rbac.GET("/resourcetype/:identifier", authzRBACController.GetResourceType)
+	rbac.GET("/resourcetype", authzRBACController.GetResourceTypes)
+
+	rbac.POST("/authorize/resoruce", authzRBACController.AuthorizeByResource)
+	rbac.POST("/authorize/resourcetype", authzRBACController.AuthorizeByResourceType)
+
+	rbac.POST("/role/grant", authzRBACController.GrantRoleToUser)
+	rbac.POST("/role/revoke", authzRBACController.RevokeRoleFromUser)
+	rbac.GET("/role/granted", authzRBACController.ListGrantedRoles)
+	rbac.GET("/resource/granted", authzRBACController.ListGrantedResources)
+	rbac.GET("/resourcetype/granted", authzRBACController.ListGrantedResourceTypes)
 
 	return e
 }
