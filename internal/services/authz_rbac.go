@@ -20,6 +20,7 @@ type AuthzRBACService interface {
 	GetPermissions() ([]schemas.RBACPermissionResponse, error)
 	UpdatePermission(identifier string, permission *schemas.RBACPermissionUpdate) (*schemas.RBACPermissionResponse, error)
 	DeletePermission(identifier string) error
+	AddRoleToPermission(roleIdentifier, permissionIdentifier string) error
 
 	CreateResourceType(resourceType *schemas.RBACResourceTypeCreate) (*schemas.RBACResourceTypeResponse, error)
 	GetResourceType(identifier string) (*schemas.RBACResourceTypeResponse, error)
@@ -28,7 +29,9 @@ type AuthzRBACService interface {
 	DeleteResourceType(identifier string) error
 
 	AuthorizeByResourceType(roleIdentifier, permissionIdentifier, resourceTypeIdentifier string) bool
+	AuthorizeUserByResourceType(userIdentifier, permissionIdentifier, resourceTypeIdentifier string) bool
 	AuthorizeByResource(roleIdentifier, permissionIdentifier, resourceIdentifier string) bool
+	AuthorizeUserByResource(userIdentifier, permissionIdentifier, resourceIdentifier string) bool
 
 	GrantRoleToUser(roleIdentifier, userIdentifier string) error
 	RevokeRoleFromUser(roleIdentifier, userIdentifier string) error
@@ -125,17 +128,6 @@ func (s *authzRBACService) DeleteRole(identifier string) error {
 }
 
 // RBACPermission
-func (s *authzRBACService) CreatePermission(permission *schemas.RBACPermissionCreate) (*schemas.RBACPermissionResponse, error) {
-	permissionModel := schemas.RBACPermissionFromCreate(permission)
-
-	if err := s.db.Create(permissionModel).Error; err != nil {
-		return nil, err
-	}
-
-	returnPermission := schemas.RBACPermissionResponseFromModel(permissionModel)
-
-	return returnPermission, nil
-}
 
 func (s *authzRBACService) GetPermission(identifier string) (*schemas.RBACPermissionResponse, error) {
 	var permission models.RBACPermission
@@ -165,25 +157,74 @@ func (s *authzRBACService) GetPermissions() ([]schemas.RBACPermissionResponse, e
 	return returnPermissions, nil
 }
 
+func (s *authzRBACService) CreatePermission(permission *schemas.RBACPermissionCreate) (*schemas.RBACPermissionResponse, error) {
+	permissionModel := schemas.RBACPermissionFromCreate(permission)
+
+	if err := s.associateResources(permissionModel, permission.ResourceIdentifiers); err != nil {
+		return nil, err
+	}
+
+	if err := s.db.Create(permissionModel).Error; err != nil {
+		return nil, err
+	}
+
+	return schemas.RBACPermissionResponseFromModel(permissionModel), nil
+}
+
 func (s *authzRBACService) UpdatePermission(identifier string, permission *schemas.RBACPermissionUpdate) (*schemas.RBACPermissionResponse, error) {
 	var existing models.RBACPermission
-
 	if err := s.db.Where("identifier = ?", identifier).First(&existing).Error; err != nil {
 		return nil, err
 	}
 
 	updateData := utils.MakeObjectWithoutNilFields(permission)
 
-	if len(updateData) == 0 {
-		return schemas.RBACPermissionResponseFromModel(&existing), nil
+	if permission.ResourceIdentifiers != nil {
+		if err := s.associateResources(&existing, permission.ResourceIdentifiers); err != nil {
+			return nil, err
+		}
 	}
 
-	if err := s.db.Model(&existing).Updates(updateData).Error; err != nil {
-		return nil, err
+	if len(updateData) > 0 {
+		if err := s.db.Model(&existing).Updates(updateData).Error; err != nil {
+			return nil, err
+		}
 	}
 
-	returnPermission := schemas.RBACPermissionResponseFromModel(&existing)
-	return returnPermission, nil
+	return schemas.RBACPermissionResponseFromModel(&existing), nil
+}
+
+func (s *authzRBACService) associateResources(permission *models.RBACPermission, resourceIdentifiers []string) error {
+	var existingResources []models.RBACResourceIdentifier
+	if err := s.db.Where("identifier IN ?", resourceIdentifiers).Find(&existingResources).Error; err != nil {
+		return err
+	}
+
+	// Mapa dos existentes
+	existingMap := make(map[string]bool)
+	for _, res := range existingResources {
+		existingMap[res.Identifier] = true
+	}
+
+	// Criar os que não existem
+	var newResources []models.RBACResourceIdentifier
+	for _, identifier := range resourceIdentifiers {
+		if !existingMap[identifier] {
+			newResources = append(newResources, models.RBACResourceIdentifier{
+				Identifier: identifier,
+			})
+		}
+	}
+
+	if len(newResources) > 0 {
+		if err := s.db.Create(&newResources).Error; err != nil {
+			return err
+		}
+		existingResources = append(existingResources, newResources...)
+	}
+
+	// Associar todos ao permission
+	return s.db.Model(permission).Association("ResourceIdentifiers").Replace(existingResources)
 }
 
 func (s *authzRBACService) DeletePermission(identifier string) error {
@@ -198,6 +239,23 @@ func (s *authzRBACService) DeletePermission(identifier string) error {
 	}
 
 	return nil
+}
+
+func (s *authzRBACService) AddRoleToPermission(roleIdentifier, permissionIdentifier string) error {
+	var role models.RBACRole
+	var permission models.RBACPermission
+
+	// Verifica se o papel e a permissão existem
+	if err := s.db.Where("identifier = ?", roleIdentifier).First(&role).Error; err != nil {
+		return err
+	}
+
+	if err := s.db.Where("identifier = ?", permissionIdentifier).First(&permission).Error; err != nil {
+		return err
+	}
+
+	// Associa o papel à permissão
+	return s.db.Model(&permission).Association("AcceptedRoles").Append(&role)
 }
 
 // RBACResourceType
@@ -306,6 +364,30 @@ func (s *authzRBACService) AuthorizeByResourceType(roleIdentifier, permissionIde
 
 }
 
+func (s *authzRBACService) AuthorizeUserByResourceType(userIdentifier, permissionIdentifier, resourceTypeIdentifier string) bool {
+	user := models.User{}
+	roles := []models.RBACRole{}
+
+	if err := s.db.Where("identifier = ?", userIdentifier).First(&user).Error; err != nil {
+		return false
+	}
+
+	if err := s.db.
+		Joins("JOIN rbac_role_users ON rbac_role_users.rbac_role_id = rbac_roles.id").
+		Where("rbac_role_users.user_id = ?", user.ID).
+		Find(&roles).Error; err != nil {
+		return false
+	}
+
+	for _, role := range roles {
+		if s.AuthorizeUserByResourceType(role.Identifier, permissionIdentifier, resourceTypeIdentifier) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (s *authzRBACService) AuthorizeByResource(roleIdentifier, permissionIdentifier, resourceIdentifier string) bool {
 	var role models.RBACRole
 	var permission models.RBACPermission
@@ -335,6 +417,31 @@ func (s *authzRBACService) AuthorizeByResource(roleIdentifier, permissionIdentif
 	return count > 0
 }
 
+func (s *authzRBACService) AuthorizeUserByResource(userIdentifier, permissionIdentifier, resourceIdentifier string) bool {
+	user := models.User{}
+	roles := []models.RBACRole{}
+
+	// Primeiro busca o usuário pelo identifier
+	if err := s.db.Where("identifier = ?", userIdentifier).First(&user).Error; err != nil {
+		return false
+	}
+
+	if err := s.db.
+		Joins("JOIN rbac_role_users ON rbac_role_users.rbac_role_id = rbac_roles.id").
+		Where("rbac_role_users.user_id = ?", user.ID).
+		Find(&roles).Error; err != nil {
+		return false
+	}
+
+	for _, role := range roles {
+		if s.AuthorizeByResource(role.Identifier, permissionIdentifier, resourceIdentifier) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // Gerenciamento de Papéis e Permissões
 func (s *authzRBACService) GrantRoleToUser(roleIdentifier, userIdentifier string) error {
 	var role models.RBACRole
@@ -349,8 +456,7 @@ func (s *authzRBACService) GrantRoleToUser(roleIdentifier, userIdentifier string
 		return err
 	}
 
-	// Associa o papel ao usuário
-	return s.db.Model(&user).Association("Roles").Append(&role)
+	return s.db.Model(&role).Association("Users").Append(&user)
 }
 
 func (s *authzRBACService) RevokeRoleFromUser(roleIdentifier, userIdentifier string) error {
@@ -367,7 +473,7 @@ func (s *authzRBACService) RevokeRoleFromUser(roleIdentifier, userIdentifier str
 	}
 
 	// Remove o papel do usuário
-	return s.db.Model(&user).Association("Roles").Delete(&role)
+	return s.db.Model(&role).Association("Users").Delete(&user)
 }
 
 func (s *authzRBACService) ListGrantedRoles(userIdentifier string) ([]string, error) {

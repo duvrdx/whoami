@@ -25,16 +25,19 @@ type UserResponse struct {
 	Identifier string  `json:"identifier"`
 	Metadata   *string `json:"metadata"`
 	IsActive   bool    `json:"is_active"`
+	IsAdmin    bool    `json:"is_admin"`
 	CreatedAt  string  `json:"created_at"`
 	UpdatedAt  string  `json:"updated_at"`
 }
 
 func UserResponseFromModel(user *models.User) *UserResponse {
+
 	return &UserResponse{
 		ID:         user.ID,
 		Identifier: user.Identifier,
 		Metadata:   &user.Metadata,
 		IsActive:   user.IsActive,
+		IsAdmin:    user.IsAdmin,
 		CreatedAt:  user.CreatedAt.Format("2006-01-02 15:04:05"),
 		UpdatedAt:  user.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
@@ -289,10 +292,11 @@ type TokenCreate struct {
 }
 
 type TokenResponse struct {
-	ID           uint   `json:"id"`
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int    `json:"expires_in"`
+	ID           uint          `json:"id"`
+	AccessToken  string        `json:"access_token"`
+	RefreshToken string        `json:"refresh_token"`
+	ExpiresIn    int           `json:"expires_in"`
+	User         *UserResponse `json:"user, omitempty"`
 }
 
 func TokenResponseFromModel(token *models.Token) *TokenResponse {
@@ -301,6 +305,7 @@ func TokenResponseFromModel(token *models.Token) *TokenResponse {
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,
 		ExpiresIn:    token.ExpiresIn,
+		User:         UserResponseFromModel(&token.User),
 	}
 }
 

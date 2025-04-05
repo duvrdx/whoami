@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"fmt"
+
 	"github.com/duvrdx/whoami/internal/schemas"
 	"github.com/duvrdx/whoami/internal/services"
 	"github.com/labstack/echo/v4"
@@ -104,6 +106,7 @@ func (controller AuthzRBACController) GetPermission(c echo.Context) error {
 }
 
 func (controller AuthzRBACController) GetPermissions(c echo.Context) error {
+
 	permissions, err := controller.authzRBACService.GetPermissions()
 	if err != nil {
 		return c.JSON(404, err)
@@ -136,6 +139,17 @@ func (controller AuthzRBACController) DeletePermission(c echo.Context) error {
 	}
 
 	return c.JSON(204, "Permission deleted successfully!")
+}
+
+func (controller AuthzRBACController) GrantPermissionToRole(c echo.Context) error {
+	roleIdentifier := c.Param("role")
+	permissionIdentifier := c.Param("permission")
+
+	if err := controller.authzRBACService.AddRoleToPermission(roleIdentifier, permissionIdentifier); err != nil {
+		return c.JSON(400, err)
+	}
+
+	return c.JSON(200, "Permission granted successfully!")
 }
 
 // RBACResourceType
@@ -202,11 +216,12 @@ func (controller AuthzRBACController) DeleteResourceType(c echo.Context) error {
 
 // Autorização
 func (controller AuthzRBACController) AuthorizeByResourceType(c echo.Context) error {
-	roleIdentifier := c.QueryParam("role")
 	permissionIdentifier := c.QueryParam("permission")
 	resourceTypeIdentifier := c.QueryParam("resource_type")
 
-	authorized := controller.authzRBACService.AuthorizeByResourceType(roleIdentifier, permissionIdentifier, resourceTypeIdentifier)
+	userJWT := c.Get("user").(*schemas.UserResponse)
+
+	authorized := controller.authzRBACService.AuthorizeUserByResourceType(userJWT.Identifier, permissionIdentifier, resourceTypeIdentifier)
 	if !authorized {
 		return c.JSON(403, "Forbidden")
 	}
@@ -215,11 +230,13 @@ func (controller AuthzRBACController) AuthorizeByResourceType(c echo.Context) er
 }
 
 func (controller AuthzRBACController) AuthorizeByResource(c echo.Context) error {
-	roleIdentifier := c.QueryParam("role")
 	permissionIdentifier := c.QueryParam("permission")
 	resourceIdentifier := c.QueryParam("resource")
+	userJWT := c.Get("user").(*schemas.UserResponse)
 
-	authorized := controller.authzRBACService.AuthorizeByResource(roleIdentifier, permissionIdentifier, resourceIdentifier)
+	fmt.Println("User JWT:", userJWT)
+
+	authorized := controller.authzRBACService.AuthorizeUserByResource(userJWT.Identifier, permissionIdentifier, resourceIdentifier)
 	if !authorized {
 		return c.JSON(403, "Forbidden")
 	}

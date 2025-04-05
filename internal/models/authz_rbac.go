@@ -10,6 +10,7 @@ type RBACRole struct {
 	Name        string           `json:"name"`
 	Description string           `json:"description" gorm:"default:''"`
 	Permissions []RBACPermission `gorm:"many2many:rbac_role_permissions;"` // Relação many2many com RBACPermission
+	Users       []User           `gorm:"many2many:rbac_role_users;"`       // Relação many2many com User
 }
 
 type RBACPermission struct {

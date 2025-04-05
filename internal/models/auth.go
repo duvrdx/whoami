@@ -8,8 +8,8 @@ type User struct {
 	gorm.Model
 	Identifier string   `json:"identifier" gorm:"unique"`
 	Password   string   `json:"password"`
-	IsActive   bool     `gorm:"default: true" json:"is_active"`
-	IsAdmin    bool     `gorm:"default: false" json:"is_admin"`
+	IsActive   bool     `gorm:"type:boolean;default:true" json:"is_active"`
+	IsAdmin    bool     `gorm:"type:boolean;default:false" json:"is_admin"`
 	Metadata   string   `gorm:"default:'{}'" json:"metadata"`
 	Groups     []*Group `gorm:"many2many:group_users;"`
 }
@@ -19,7 +19,7 @@ type Group struct {
 	Identifier  string  `json:"identifier" gorm:"unique"`
 	Description string  `gorm:"default:''" json:"description"`
 	Metadata    string  `gorm:"default:'{}'" json:"metadata"`
-	IsActive    bool    `gorm:"default: true" json:"is_active"`
+	IsActive    bool    `gorm:"type:boolean;default:true" json:"is_active"`
 	Users       []*User `gorm:"many2many:group_users;"`
 }
 
@@ -27,7 +27,7 @@ type Client struct {
 	gorm.Model
 	Identifier string `json:"identifier" gorm:"unique"`
 	Secret     string `json:"secret"`
-	IsActive   bool   `gorm:"default: true" json:"is_active"`
+	IsActive   bool   `gorm:"type:boolean;default:true" json:"is_active"`
 	Grant      string `json:"grant"`
 }
 

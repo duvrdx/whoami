@@ -8,6 +8,7 @@ import (
 	"github.com/duvrdx/whoami/internal/schemas"
 	"github.com/duvrdx/whoami/internal/utils"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // AuthService interface
@@ -35,6 +36,7 @@ type AuthService interface {
 	GetToken(identifier string) (*schemas.TokenResponse, error)
 	GetTokenByRefreshToken(refreshToken string) (*models.Token, error)
 	GetTokenByAccessToken(accessToken string) (*schemas.TokenResponse, error)
+
 	RevokeToken(identifier string) error
 	Authorize(accessToken string) bool
 }
@@ -289,7 +291,13 @@ func (s *authService) CreateToken(token *schemas.TokenCreate) (*schemas.TokenRes
 		return nil, err
 	}
 
+	// Recarrega o modelo completo do banco (com todos os campos atualizados)
+	if err := s.db.Preload(clause.Associations).First(tokenModel, tokenModel.ID).Error; err != nil {
+		return nil, err
+	}
+
 	returnToken := schemas.TokenResponseFromModel(tokenModel)
+	returnToken.User = nil
 
 	return returnToken, nil
 }
@@ -297,7 +305,7 @@ func (s *authService) CreateToken(token *schemas.TokenCreate) (*schemas.TokenRes
 func (s *authService) GetToken(identifier string) (*schemas.TokenResponse, error) {
 	var token models.Token
 
-	if err := s.db.Where("identifier = ?", identifier).First(&token).Error; err != nil {
+	if err := s.db.Preload("User").Where("identifier = ?", identifier).First(&token).Error; err != nil {
 		return nil, err
 	}
 
@@ -319,7 +327,7 @@ func (s *authService) GetTokenByRefreshToken(refreshToken string) (*models.Token
 func (s *authService) GetTokenByAccessToken(accessToken string) (*schemas.TokenResponse, error) {
 	var token models.Token
 
-	if err := s.db.Where("access_token = ?", accessToken).First(&token).Error; err != nil {
+	if err := s.db.Preload("User").Where("access_token = ?", accessToken).First(&token).Error; err != nil {
 		return nil, err
 	}
 

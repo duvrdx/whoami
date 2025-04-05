@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/duvrdx/whoami/internal/config"
@@ -11,9 +10,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 )
-
-var jwtSecret = config.JWTSecret
-var tokenExpiration = config.TokenExpiration
 
 type Claims struct {
 	UserID   uint `json:"user_id"`
@@ -202,10 +198,7 @@ func (controller AuthController) Token(c echo.Context) error {
 		}
 
 		// Define o tempo de expiração do token
-		expiresIn := time.Now().Unix() + int64(config.TokenExpiration)
-
-		fmt.Println(config.JWTSecret)
-		fmt.Println(string(config.JWTSecret))
+		expiresIn := time.Now().Unix() + int64(config.Config.Token.Expiration)
 
 		// Cria as claims do JWT
 		claims := &Claims{
@@ -218,10 +211,9 @@ func (controller AuthController) Token(c echo.Context) error {
 
 		// Gera o token JWT
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-		accessToken, err := token.SignedString(config.JWTSecret)
+		accessToken, err := token.SignedString(config.Config.Token.Secret)
 
 		if err != nil {
-			fmt.Println(err)
 			return c.JSON(500, "Failed to generate access token")
 		}
 
@@ -273,7 +265,7 @@ func (controller AuthController) RefreshToken(c echo.Context) error {
 		return c.JSON(404, "Token expired")
 	}
 
-	expiresIn := time.Now().Unix() + int64(config.TokenExpiration)
+	expiresIn := time.Now().Unix() + int64(config.Config.Token.Expiration)
 
 	// Cria as claims do JWT
 	claims := &Claims{
@@ -286,7 +278,7 @@ func (controller AuthController) RefreshToken(c echo.Context) error {
 
 	// Gera o token JWT
 	newTokenJWT := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	newAccessToken, err := newTokenJWT.SignedString(config.JWTSecret)
+	newAccessToken, err := newTokenJWT.SignedString(config.Config.Token.Secret)
 
 	if err != nil {
 		return c.JSON(500, "Failed to generate access token")
